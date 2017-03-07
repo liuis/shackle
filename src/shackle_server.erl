@@ -155,7 +155,10 @@ handle_msg(#cast {} = Cast, #state {
 
     reply(Name, {error, no_socket}, Cast),
     {ok, State};
-handle_msg(#cast {request = Request} = Cast, #state {
+handle_msg(#cast {
+        request = Request,
+        timeout = Timeout
+    } = Cast, #state {
         client = Client,
         client_bin = ClientBin,
         client_state = ClientState,
@@ -171,7 +174,9 @@ handle_msg(#cast {request = Request} = Cast, #state {
     case Protocol:send(Socket, Header, Data) of
         ok ->
             statsderl:increment(["shackle.", ClientBin, ".send"], 1, 0.005),
-            shackle_queue:add(ExtRequestId, Cast),
+            TimerRef = erlang:send_after(Timeout, self(),
+                {timeout, ExtRequestId}),
+            shackle_queue:add(ExtRequestId, Cast, TimerRef),
 
             {ok, State#state {
                 client_state = ClientState2
@@ -210,6 +215,9 @@ handle_msg({tcp_error, Socket, Reason}, #state {
     shackle_utils:warning_msg(PoolName, "tcp connection error: ~p", [Reason]),
     shackle_tcp:close(Socket),
     close(State);
+handle_msg({timeout, ExtRequestId}, State) ->
+    ok = process_replies([{ExtRequestId, {error, timeout}}], State),
+    {ok, State};
 handle_msg({udp, _Socket, _Ip, _InPortNo, Data}, #state {
         client_bin = ClientBin
     } = State) ->
@@ -249,7 +257,8 @@ process_replies([{ExtRequestId, Reply} | T], #state {
 
     statsderl:increment(["shackle.", ClientBin, ".replies"], 1, 0.005),
     case shackle_queue:remove(Name, ExtRequestId) of
-        {ok, #cast {timestamp = Timestamp} = Cast} ->
+        {ok, #cast {timestamp = Timestamp} = Cast, TimerRef} ->
+            erlang:cancel_timer(TimerRef),
             statsderl:increment(["shackle.", ClientBin, ".found"], 1, 0.005),
             Diff = timer:now_diff(os:timestamp(), Timestamp),
             statsderl:timing(["shackle.", ClientBin, ".reply"], Diff, 0.005),

@@ -5,6 +5,7 @@
     reply          :: undefined | term(),
     request        :: term(),
     request_id     :: request_id(),
+    timeout        :: timeout(),
     timestamp      :: erlang:timestamp()
 }).
 
