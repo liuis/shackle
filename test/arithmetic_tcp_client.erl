@@ -25,6 +25,9 @@
 
 -type tiny_int() :: 0..255.
 
+-define(BACKLOG_SIZE, 1024).
+-define(POOL_SIZE, 16).
+
 %% public
 -spec add(tiny_int(), tiny_int()) ->
     pos_integer().
@@ -36,13 +39,13 @@ add(A, B) ->
     pos_integer().
 
 multiply(A, B) ->
-    shackle:call(?POOL_NAME, {multiply, A, B}).
+    shackle:call(?POOL_NAME, {multiply, A, B}, ?TIMEOUT).
 
 -spec start() ->
     ok | {error, shackle_not_started | pool_already_started}.
 
 start() ->
-    start(16).
+    start(?POOL_SIZE).
 
 -spec start(pos_integer()) ->
     ok | {error, shackle_not_started | pool_already_started}.
@@ -56,7 +59,7 @@ start(PoolSize) ->
             {packet, raw}
         ]}
     ], [
-        {backlog_size, 1024},
+        {backlog_size, ?BACKLOG_SIZE},
         {pool_size, PoolSize}
     ]).
 

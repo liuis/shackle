@@ -5,7 +5,7 @@
     run/0
 ]).
 
--define(N, 10240).
+-define(N, 102400).
 
 -define(CONCURENCIES, [32, 64, 128, 512, 2048]).
 -define(POOL_SIZES, [16, 32, 64, 128, 256]).
