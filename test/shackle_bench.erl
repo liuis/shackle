@@ -5,24 +5,51 @@
     run/0
 ]).
 
--define(N, 100000).
--define(P, 20).
+-define(N, 10240).
+
+-define(CONCURENCIES, [32, 64, 128, 512, 2048]).
+-define(POOL_SIZES, [8, 16, 32, 64, 128, 256]).
 
 %% public
--spec run() -> ok.
-
 run() ->
-    shackle_test_utils:preload_modules(),
-    application:start(shackle),
-    arithmetic_tcp_client:start(),
+    error_logger:tty(false),
+    {ok, _} = shackle_app:start(),
+    ok = arithmetic_tcp_client:start(),
+    io:format("Running benchmark...~n~n" ++
+        "PoolSize  Concurency  Requests/s  Error %~n" ++
+        [$= || _ <- lists:seq(1, 49)] ++ "~n", []),
+    run_pool_size(?POOL_SIZES, ?CONCURENCIES, ?N).
 
-    Timing = timing:function(fun () ->
-        arithmetic_tcp_client:add(10, 10)
-    end, ?N, ?P),
+%% private
+lookup(Key, List) ->
+    case lists:keyfind(Key, 1, List) of
+        false -> undefined;
+        {_, Value} -> Value
+    end.
 
-    io:format("~p~n", [Timing]),
+name(PoolSize, Concurency) ->
+    list_to_atom("shackle_" ++ integer_to_list(PoolSize) ++
+        "_" ++ integer_to_list(Concurency)).
 
-    arithmetic_tcp_client:stop(),
-    application:stop(shackle),
+run_pool_size([], _Concurencies, _N) ->
+    ok;
+run_pool_size([PoolSize | T], Concurencies, N) ->
+    run_concurency(PoolSize, Concurencies, N),
+    run_pool_size(T, Concurencies, N).
 
-    ok.
+run_concurency(_PoolSize, [], _N) ->
+    ok;
+run_concurency(PoolSize, [Concurency | T], N) ->
+    Name = name(PoolSize, Concurency),
+    Fun = fun() -> 20 = arithmetic_tcp_client:add(10, 10), ok end,
+    Results = timing_hdr:run(Fun, [
+        {name, Name},
+        {concurrency, Concurency},
+        {iterations, N},
+        {output, "output/" ++ atom_to_list(Name)}
+    ]),
+    Qps = lookup(success, Results) / (lookup(total_time, Results) / 1000000),
+    Errors = lookup(errors, Results) / lookup(iterations, Results) * 100,
+    io:format("~7B ~11B ~11B ~8.1f~n",
+        [PoolSize, Concurency, trunc(Qps), Errors]),
+    run_concurency(PoolSize, T, N).
