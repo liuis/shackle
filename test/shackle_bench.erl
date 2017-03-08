@@ -11,6 +11,9 @@
 -define(POOL_SIZES, [16, 32, 64, 128, 256]).
 
 %% public
+-spec run() ->
+    ok.
+
 run() ->
     error_logger:tty(false),
     {ok, _} = shackle_app:start(),
@@ -41,7 +44,12 @@ run_concurency(_PoolSize, [], _N) ->
 run_concurency(PoolSize, [Concurency | T], N) ->
     ok = arithmetic_tcp_client:start(),
     Fun = fun() ->
-        20 = arithmetic_tcp_client:add(10, 10), ok
+        case arithmetic_tcp_client:add(10, 10) of
+            20 ->
+                ok;
+            {error, Reason} ->
+                {error, Reason}
+        end
     end,
     Name = name(PoolSize, Concurency),
     Results = timing_hdr:run(Fun, [
