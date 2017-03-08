@@ -56,6 +56,7 @@ start(PoolSize) ->
             {packet, raw}
         ]}
     ], [
+        {backlog_size, 1024},
         {pool_size, PoolSize}
     ]).
 
