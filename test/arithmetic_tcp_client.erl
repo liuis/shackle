@@ -5,6 +5,7 @@
     add/2,
     multiply/2,
     start/0,
+    start/1,
     stop/0
 ]).
 
@@ -41,6 +42,12 @@ multiply(A, B) ->
     ok | {error, shackle_not_started | pool_already_started}.
 
 start() ->
+    start(16).
+
+-spec start(pos_integer()) ->
+    ok | {error, shackle_not_started | pool_already_started}.
+
+start(PoolSize) ->
     shackle_pool:start(?POOL_NAME, ?CLIENT_TCP, [
         {port, ?PORT},
         {reconnect, true},
@@ -48,6 +55,8 @@ start() ->
             binary,
             {packet, raw}
         ]}
+    ], [
+        {pool_size, PoolSize}
     ]).
 
 -spec stop() ->
