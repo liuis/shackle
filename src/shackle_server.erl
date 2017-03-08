@@ -6,18 +6,11 @@
 
 %% internal
 -export([
-    init/5,
+    init/3,
     start_link/4
 ]).
 
 %% sys behavior
--export([
-    system_code_change/4,
-    system_continue/3,
-    system_get_state/1,
-    system_terminate/4
-]).
-
 -record(state, {
     client           :: client(),
     header           :: undefined | iodata(),
@@ -41,17 +34,15 @@
     {ok, pid()}.
 
 start_link(Name, PoolName, Client, ClientOptions) ->
-    proc_lib:start_link(?MODULE, init, [Name, PoolName, Client,
-        ClientOptions, self()]).
+    Args = [PoolName, Client, ClientOptions],
+    metal:start_link(?MODULE, Name, Args).
 
--spec init(server_name(), pool_name(), client(), client_options(), pid()) ->
+
+-spec init(server_name(), pid(), [pool_name(), client(), client_options()]) ->
     no_return().
 
-init(Name, PoolName, Client, ClientOptions, Parent) ->
-    process_flag(trap_exit, true),
-    proc_lib:init_ack(Parent, {ok, self()}),
-    register(Name, self()),
-
+init(Name, Parent, Opts) ->
+    [PoolName, Client, ClientOptions] = Opts,
     self() ! ?MSG_CONNECT,
     ok = shackle_backlog:new(Name),
 
@@ -73,31 +64,6 @@ init(Name, PoolName, Client, ClientOptions, Parent) ->
         reconnect_state = ReconnectState,
         socket_options = SocketOptions
     }, undefined).
-
-%% sys callbacks
--spec system_code_change(state(), module(), undefined | term(), term()) ->
-    {ok, state()}.
-
-system_code_change(State, _Module, _OldVsn, _Extra) ->
-    {ok, State}.
-
--spec system_continue(pid(), [], {state(), client_state()}) ->
-    ok.
-
-system_continue(_Parent, _Debug, {State, ClientState}) ->
-    loop(State, ClientState).
-
--spec system_get_state(state()) ->
-    {ok, state()}.
-
-system_get_state(State) ->
-    {ok, State}.
-
--spec system_terminate(term(), pid(), [], state()) ->
-    none().
-
-system_terminate(Reason, _Parent, _Debug, _State) ->
-    exit(Reason).
 
 %% private
 close(#state {name = Name} = State, ClientState) ->
@@ -217,18 +183,6 @@ handle_msg_data(Data, #state {client = Client} = State, ClientState) ->
     {ok, Replies, ClientState2} = Client:handle_data(Data, ClientState),
     ok = process_replies(Replies, State),
     {ok, State, ClientState2}.
-
-loop(#state {parent = Parent} = State, ClientState) ->
-    receive
-        {'EXIT', Parent, Reason} ->
-            terminate(Reason, State, ClientState);
-        {system, From, Request} ->
-            sys:handle_system_msg(Request, From, Parent, ?MODULE, [],
-                {State, ClientState});
-        Msg ->
-            {ok, State2, ClientState2} = handle_msg(Msg, State, ClientState),
-            loop(State2, ClientState2)
-    end.
 
 process_replies([], _State) ->
     ok;
